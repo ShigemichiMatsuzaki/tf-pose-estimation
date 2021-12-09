@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import time
 import os
 import sys
@@ -7,6 +7,7 @@ import ast
 from threading import Lock
 import rospy
 import rospkg
+import tensorflow as tf
 from cv_bridge import CvBridge, CvBridgeError
 from std_msgs.msg import String
 from sensor_msgs.msg import Image
@@ -87,7 +88,12 @@ if __name__ == '__main__':
         rospy.logerr('invalid model: %s, e=%s' % (model, e))
         sys.exit(-1)
 
-    pose_estimator = TfPoseEstimator(graph_path, target_size=(w, h))
+    if rospy.get_param('~allow_growth'):
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True
+        pose_estimator = TfPoseEstimator(graph_path, target_size=(w, h), tf_config=config)
+    else:
+        pose_estimator = TfPoseEstimator(graph_path, target_size=(w, h))
     cv_bridge = CvBridge()
 
     rospy.Subscriber(image_topic, Image, callback_image, queue_size=1, buff_size=2**24)
