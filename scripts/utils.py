@@ -10,6 +10,7 @@ import rospkg
 from cv_bridge import CvBridge, CvBridgeError
 from std_msgs.msg import String
 from sensor_msgs.msg import Image
+from visualization_msgs.msg import Marker
 from tfpose_ros.msg import Persons, Person, BodyPartElm
 from tf_pose.estimator import Human, BodyPart
 from tf_pose.networks import model_wh, get_graph_path
@@ -47,6 +48,7 @@ def humans_to_msg(humans):
 
     return persons
 
+
 def msg_to_humans(persons_msg):
     """
     Convert Persons ROS message to human information
@@ -77,3 +79,121 @@ def msg_to_humans(persons_msg):
 
     return humans
 
+
+def project_2d_to_3d(u, v, depth, camera_info):
+    """Project a 2D coordinate to the 3D space using the depth value and the camera parameters
+    
+    Parameters
+    ----------
+    u : float
+        x value in camera coordinate
+    v : float
+        y value in camera coordinate
+    depth : float
+        Depth value of the pixel (x, y)
+    camera_info : sensor_msgs.CameraInfo
+        Camera info message
+
+    Results
+    -------
+    x_3d : float
+        x coordinate of the 3D point
+    y_3d : float
+        y coordinate of the 3D point
+    z_3d : float
+        z coordinate of the 3D point
+
+    """
+    # Get camera parameters from the camera_info message
+    fx, fy, cx, cy = camera_info_to_parameters(camera_info)
+
+    x_3d = (u - cx) * depth / fx
+    y_3d = (v - cy) * depth / fy
+    z_3d = depth
+
+    return x_3d, y_3d, z_3d
+
+
+def camera_info_to_parameters(camera_info):
+    """
+
+    Parameters
+    ----------
+    camera_info : sensor_msgs.CameraInfo
+
+    Returns
+    -------
+    fx : float
+        Focal length in x axis
+    fy : float
+        Focal length in y axis
+    cx : float
+        Image center in x axis
+    cy : float
+        Image center in y axis
+
+    """
+    fx = camera_info.K[0]
+    fy = camera_info.K[4]
+    cx = camera_info.K[2]
+    cy = camera_info.K[5]
+
+    return fx, fy, cx, cy
+
+
+def coordinate_to_marker(x, y, z, r=1.0, g=0.0, b=0.0, a=1.0, header=None):
+    """
+
+    Parameters
+    ----------
+    x : float
+        x coordinate of the point
+    y : float
+        y coordinate of the point
+    z : float
+        z coordinate of the point
+    r : float
+        Color red
+    g : float
+        Color green
+    b : float
+        Color blue
+    a : float
+        Alpha
+    header : 
+        Header
+
+    Returns
+    -------
+    marker : visualization_msgs.Marker
+        Marker message
+
+    """
+    marker = Marker()
+
+    # Set header
+    if header is None:
+        marker.header.frame_id = frame_id
+        marker.header.stamp = rospy.Time.now()
+    else:
+        marker.header = header
+
+    marker.ns = "right_hand_3d"
+    marker.type = Marker.SPHERE
+    marker.action = Marker.ADD
+    marker.pose.position.x = x
+    marker.pose.position.y = y
+    marker.pose.position.z = z
+    marker.pose.orientation.x = 0.0
+    marker.pose.orientation.y = 0.0
+    marker.pose.orientation.z = 0.0
+    marker.pose.orientation.w = 1.0
+    marker.scale.x = 0.05
+    marker.scale.y = 0.05
+    marker.scale.z = 0.05
+    marker.color.a = a
+    marker.color.r = r
+    marker.color.g = g
+    marker.color.b = b
+
+    return marker
