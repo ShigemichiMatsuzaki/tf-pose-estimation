@@ -88,7 +88,7 @@ if __name__ == '__main__':
         rospy.logerr('invalid model: %s, e=%s' % (model, e))
         sys.exit(-1)
 
-    if rospy.get_param('~allow_growth'):
+    if rospy.has_param('~allow_growth') and rospy.has_param('~allow_growth'):
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
         pose_estimator = TfPoseEstimator(graph_path, target_size=(w, h), tf_config=config)
