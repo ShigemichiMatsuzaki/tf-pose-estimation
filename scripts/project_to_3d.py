@@ -24,12 +24,12 @@ class ProjectPoseTo3d:
     
         """
         # Define indiviual subscribers
-        self.pose_topic  = rospy.get_param("~pose_topic", "/pose_estimator/pose")
-        self.depth_topic = rospy.get_param("~depth_topic", "/depth_to_rgb/image_raw")
-        self.camera_info_topic = rospy.get_param("~camera_info_topic", "/rgb/camera_info")
-        self.sub_persons = message_filters.Subscriber(self.pose_topic, Persons)
-        self.sub_depth   = message_filters.Subscriber(self.depth_topic, Image)
-        self.sub_camera_info = rospy.Subscriber(self.camera_info_topic, CameraInfo, self.callback_camera_info, queue_size=1)
+#        self.pose_topic  = rospy.get_param("~pose_topic", "/pose_estimator/pose")
+#        self.depth_topic = rospy.get_param("~depth_topic", "/depth_to_rgb/image_raw")
+#        self.camera_info_topic = rospy.get_param("~camera_info_topic", "/rgb/camera_info")
+        self.sub_persons = message_filters.Subscriber("pose", Persons)
+        self.sub_depth   = message_filters.Subscriber("depth", Image)
+        self.sub_camera_info = rospy.Subscriber("camera_info", CameraInfo, self.callback_camera_info, queue_size=1)
 
         # A synchronizer for the pose and depth topics
         self.time_synchronizer = message_filters.ApproximateTimeSynchronizer([self.sub_persons, self.sub_depth], 10, 1/30*0.5)
@@ -69,32 +69,50 @@ class ProjectPoseTo3d:
         try:
             depth_image = self.bridge.imgmsg_to_cv2(depth, desired_encoding='passthrough')
         except CvBridgeError as e:
-            rospy.logerr('Converting Image Error. ' + str(e))
+#            rospy.logerr('Converting Image Error. ' + str(e))
             return
 
         img_w, img_h = persons.image_w, persons.image_h
-        # Sort the list by the distance (depth) 
         # Choose the closest human
         min_mean_depth = 1000000
         closest_human = None
         for human in humans:
-            mean_depth = self.mean_depth_of_body_parts(human, depth_image, img_w, img_h)
+            try:
+                mean_depth = self.mean_depth_of_body_parts(human, depth_image, img_w, img_h)
+            except ValueError as e:
+#                rospy.logerr("No valid depth was calculated for this person. Continue")
+                continue
+
+            print(mean_depth)
             if mean_depth < min_mean_depth:
                 min_mean_depth = mean_depth
                 closest_human = human
+
+        if closest_human is None:
+#            rospy.logerr('Closest human not found')
+            return
         
         # If the right hand is not detected, return
-        if CocoPart.RWrist.value not in humans[0].body_parts.keys():
-            rospy.logwarn("Right hand is not detected")
+#        if CocoPart.RWrist.value not in humans[0].body_parts.keys():
+#            rospy.logwarn("Right hand is not detected")
+#            return
+
+        try:
+            # Get the coordinates of the right hand in the image coordinate
+            right_wrist = closest_human.body_parts[CocoPart.RWrist.value]
+            x, y = right_wrist.x, right_wrist.y
+            u, v = int(x*img_w), int(y*img_h)
+        except KeyError as e:
+#            rospy.logwarn("Right hand is not detected. Error: " + str(e))
             return
 
-        # Get the coordinates of the right hand in the image coordinate
-        right_wrist = closest_human.body_parts[CocoPart.RWrist.value]
-        x, y = right_wrist.x, right_wrist.y
-        u, v = int(x*img_w), int(y*img_h)
-
         # Calculate depth
-        depth_val = self.get_median_depth(depth_image, u, v, img_w, img_h)
+        try:
+            depth_val = self.get_median_depth(depth_image, u, v, img_w, img_h)
+        except ValueError as e:
+            rospy.logwarn("No valid depth was detected Error: " + str(e))
+            return
+
 
         # Project the 2D joint coordinate to the 3D space
         x_3d, y_3d, z_3d = project_2d_to_3d(u, v, depth_val, self.camera_info)
@@ -141,9 +159,20 @@ class ProjectPoseTo3d:
             A mean depth value among the body parts
         """
         depth_sum = 0
+        num_invalid_part = 0
         for body_part in human.body_parts.values():
             u, v = int(body_part.x*img_w), int(body_part.y*img_h)
-            depth_sum = self.get_median_depth(depth, u, v, img_w, img_h)
+            try:
+                depth_sum += self.get_median_depth(depth, u, v, img_w, img_h)
+            except ValueError as e:
+                rospy.logwarn("No valid depth is detected. Skip body_part {}".format(body_part.part_idx))
+                num_invalid_part += 1
+                continue
+
+        # If no valid depth is calculated on all the body parts,
+        # raise an exception
+        if num_invalid_part == len(human.body_parts):
+            raise ValueError
 
         return depth_sum / len(human.body_parts)
 
@@ -175,7 +204,14 @@ class ProjectPoseTo3d:
         h_min, h_max = max(0, v-window_size), min(v+window_size, img_h)
         w_min, w_max = max(0, u-window_size), min(u+window_size, img_w)
         d_neighbor = depth[h_min:h_max, w_min:w_max]
-        depth_val = np.median(d_neighbor)
+        # Remove NaN
+        d_neighbor = d_neighbor[~np.isnan(d_neighbor)]
+        
+        if d_neighbor.size > 0:
+#            depth_val = np.median(d_neighbor)
+            depth_val = np.mean(d_neighbor)
+        else:
+            raise ValueError
 
         return depth_val
 
