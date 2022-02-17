@@ -11,6 +11,7 @@ from cv_bridge import CvBridge, CvBridgeError
 from std_msgs.msg import String
 from sensor_msgs.msg import Image, CameraInfo
 from visualization_msgs.msg import Marker
+from geometry_msgs.msg import PointStamped
 from tfpose_ros.msg import Persons, Person, BodyPartElm
 from tf_pose.common import CocoPart, CocoColors
 from utils import msg_to_humans, project_2d_to_3d, coordinate_to_marker
@@ -37,6 +38,7 @@ class ProjectPoseTo3d:
 
         # Define publishers
         self.pub_marker = rospy.Publisher("~marker", Marker, queue_size=10)
+        self.pub_right_hand   = rospy.Publisher("~right_hand", PointStamped, queue_size=10)
 
         # CV Bridge
         self.bridge = CvBridge()
@@ -89,9 +91,12 @@ class ProjectPoseTo3d:
             return
 
         # Get the coordinates of the right hand in the image coordinate
-        right_wrist = closest_human.body_parts[CocoPart.RWrist.value]
-        x, y = right_wrist.x, right_wrist.y
-        u, v = int(x*img_w), int(y*img_h)
+        if CocoPart.RWrist.value in closest_human.body_parts:
+            right_wrist = closest_human.body_parts[CocoPart.RWrist.value]
+            x, y = right_wrist.x, right_wrist.y
+            u, v = int(x*img_w), int(y*img_h)
+        else:
+            return
 
         # Calculate depth
         depth_val = self.get_median_depth(depth_image, u, v, img_w, img_h)
@@ -100,11 +105,18 @@ class ProjectPoseTo3d:
         x_3d, y_3d, z_3d = project_2d_to_3d(u, v, depth_val, self.camera_info)
 
         color_right_hand = CocoColors[CocoPart.RWrist.value]
+        # Publish joint as a Marker message for visualization
         marker = coordinate_to_marker(x_3d, y_3d, z_3d,
             r=color_right_hand[2], g=color_right_hand[1], b=color_right_hand[0],
             header=depth.header)
-
         self.pub_marker.publish(marker)
+        
+        # Publish joint as a PointStamped message
+        point_stamped = PointStamped()
+        point_stamped.header = depth.header
+        point_stamped.point = marker.pose.position
+
+        self.pub_right_hand.publish(point_stamped)
 
 
     def callback_camera_info(self, camera_info):

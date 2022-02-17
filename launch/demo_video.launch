@@ -3,6 +3,7 @@
     <arg name="video" default="$(find tfpose_ros)/etcs/dance.mp4" />
     <arg name="video_width" default="1280" />
     <arg name="video_height" default="720" />
+    <arg name="use_project_3d" default="true" />
 
     <arg name="gpuid" default="0" />
 

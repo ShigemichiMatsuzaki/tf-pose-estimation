@@ -2,6 +2,7 @@
     <arg name="rgb" default="/rgb/image_raw" />
     <arg name="video_width" default="1280" />
     <arg name="video_height" default="720" />
+    <arg name="use_project_3d" default="true" />
 
     <arg name="gpuid" default="0" />
 
@@ -22,4 +23,6 @@
         <param name="camera" value="$(arg rgb)" />
         <param name="pose" value="/pose_estimator/pose" />
     </node>
+
+    <node if="$(arg use_project_3d)" name="project_to_3d" pkg="tfpose_ros" type="project_to_3d.py" />
 </launch>
