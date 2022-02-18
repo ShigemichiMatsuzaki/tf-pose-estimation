@@ -25,12 +25,15 @@ class ProjectPoseTo3d:
     
         """
         # Define indiviual subscribers
-        self.pose_topic  = rospy.get_param("~pose_topic", "/pose_estimator/pose")
-        self.depth_topic = rospy.get_param("~depth_topic", "/depth_to_rgb/image_raw")
-        self.camera_info_topic = rospy.get_param("~camera_info_topic", "/rgb/camera_info")
-        self.sub_persons = message_filters.Subscriber(self.pose_topic, Persons)
-        self.sub_depth   = message_filters.Subscriber(self.depth_topic, Image)
-        self.sub_camera_info = rospy.Subscriber(self.camera_info_topic, CameraInfo, self.callback_camera_info, queue_size=1)
+#        self.pose_topic  = rospy.get_param("~pose_topic", "/pose_estimator/pose")
+#        self.depth_topic = rospy.get_param("~depth_topic", "/depth_to_rgb/image_raw")
+#        self.camera_info_topic = rospy.get_param("~camera_info_topic", "/rgb/camera_info")
+#        self.sub_persons = message_filters.Subscriber(self.pose_topic, Persons)
+#        self.sub_depth   = message_filters.Subscriber(self.depth_topic, Image)
+#        self.sub_camera_info = rospy.Subscriber(self.camera_info_topic, CameraInfo, self.callback_camera_info, queue_size=1)
+        self.sub_persons = message_filters.Subscriber("~pose", Persons)
+        self.sub_depth   = message_filters.Subscriber("~depth", Image)
+        self.sub_camera_info = rospy.Subscriber("~camera_info", CameraInfo, self.callback_camera_info, queue_size=1)
 
         # A synchronizer for the pose and depth topics
         self.time_synchronizer = message_filters.ApproximateTimeSynchronizer([self.sub_persons, self.sub_depth], 10, 1/30*0.5)
@@ -45,6 +48,8 @@ class ProjectPoseTo3d:
 
         # Camera info
         self.camera_info = None
+
+        self.depth_unit = rospy.get_param("~depth_unit", "m")
 
 
     def callback_persons_and_depth(self, persons, depth):
@@ -100,6 +105,8 @@ class ProjectPoseTo3d:
 
         # Calculate depth
         depth_val = self.get_median_depth(depth_image, u, v, img_w, img_h)
+        if self.depth_unit == 'cm':
+            depth_val /= 1000
 
         # Project the 2D joint coordinate to the 3D space
         x_3d, y_3d, z_3d = project_2d_to_3d(u, v, depth_val, self.camera_info)
